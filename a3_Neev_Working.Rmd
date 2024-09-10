@@ -1,0 +1,12 @@
+```{r imports}
+library(tidyverse)
+library(dplyr)
+```
+
+```{r}
+x_train <- read_csv("mimic_data/mimic_train_X.csv")
+y_train <- read_csv("mimic_data/mimic_train_y.csv")
+view(x_train)
+```
+
+
