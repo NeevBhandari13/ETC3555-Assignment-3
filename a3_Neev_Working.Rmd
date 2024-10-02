@@ -1,12 +1,221 @@
-```{r imports}
-library(tidyverse)
+
+```{r}
+#file.choose()
+```
+
+```{r, message=FALSE}
 library(dplyr)
+library(ggplot2)
+library(caret)
+```
+
+
+####  Predictor Variables (X)
+
+The predictor variables used in this analysis represent a wide range of patient characteristics and clinical measurements, including:
+
+**Vital Signs:** These include minimum, maximum, and mean values of heart rate, systolic blood pressure (SysBP), diastolic blood pressure (DiasBP), respiratory rate, temperature, and oxygen saturation (SpO2). These are critical indicators of a patient's physiological condition during their ICU stay.
+
+**Demographic Information:** Variables such as GENDER, DOB (date of birth), and ETHNICITY provide insight into the patient’s background.
+
+**Admission Information:** Variables like ADMITTIME, ADMISSION_TYPE, and INSURANCE indicate the circumstances and context of the patient’s hospital admission.
+
+**Diagnosis Information:** The DIAGNOSIS variable captures the primary diagnosis at the time of ICU admission, while ICD9_diagnosis provides the corresponding ICD-9 code.
+
+##### Independent Variables: mimic_train_X.csv
+
+**subject_id**: Unique identifier for each patient.
+**hadm_id**: Hospital admission ID, unique for each hospital admission.
+**icustay_id**: Unique identifier for each ICU stay.
+**HeartRate_Min**: The minimum heart rate recorded during the ICU stay.
+**HeartRate_Max**: The maximum heart rate recorded during the ICU stay.
+**HeartRate_Mean**: The average heart rate during the ICU stay.
+**SysBP_Min**: Minimum systolic blood pressure recorded during the ICU stay.
+**SysBP_Max**: Maximum systolic blood pressure recorded during the ICU stay.
+**SysBP_Mean**: The average systolic blood pressure during the ICU stay.
+**DiasBP_Min**: Minimum diastolic blood pressure recorded during the ICU stay.
+**DiasBP_Max**: Maximum diastolic blood pressure recorded during the ICU stay.
+**DiasBP_Mean**: The average diastolic blood pressure during the ICU stay.
+**MeanBP_Min**: Minimum mean arterial blood pressure recorded during the ICU stay.
+**MeanBP_Max**: Maximum mean arterial blood pressure recorded during the ICU stay.
+**MeanBP_Mean**: The average mean arterial blood pressure during the ICU stay.
+**RespRate_Min**: Minimum respiratory rate recorded during the ICU stay.
+**RespRate_Max**: Maximum respiratory rate recorded during the ICU stay.
+**RespRate_Mean**: The average respiratory rate during the ICU stay.
+**TempC_Min**: Minimum body temperature (in Celsius) recorded during the ICU stay.
+**TempC_Max**: Maximum body temperature (in Celsius) recorded during the ICU stay.
+**TempC_Mean**: The average body temperature (in Celsius) during the ICU stay.
+**SpO2_Min**: Minimum oxygen saturation (SpO2) level recorded during the ICU stay.
+**SpO2_Max**: Maximum oxygen saturation (SpO2) level recorded during the ICU stay.
+**SpO2_Mean**: The average oxygen saturation (SpO2) level during the ICU stay.
+**Glucose_Min**: Minimum blood glucose level recorded during the ICU stay.
+**Glucose_Max**: Maximum blood glucose level recorded during the ICU stay.
+**Glucose_Mean**: The average blood glucose level during the ICU stay.
+
+**GENDER**: Gender of the patient.
+**DOB**: Date of birth of the patient.
+**ADMITTIME**: Timestamp of the patient's hospital admission.
+**Diff**: Time difference between hospital admission and another event.
+**ADMISSION_TYPE**: Type of admission (e.g., Emergency, Elective).
+**INSURANCE**: Patient's insurance type.
+**RELIGION**: Patient’s religion.
+**MARITAL_STATUS**: Marital status of the patient.
+**ETHNICITY**: Patient’s ethnicity.
+**DIAGNOSIS**: Initial diagnosis at the time of ICU admission.
+**ICD9_diagnosis**: The main diagnosis code in the ICD-9 system.
+**FIRST_CAREUNIT**: The first ICU care unit the patient was admitted to (e.g., MICU, SICU, TSICU).
+
+
+#### Target Variables (Y)
+
+Two possible target variables (dependent variables) are of interest in this analysis:
+
+**HOSPITAL_EXPIRE_FLAG:** A binary variable that indicates whether the patient passed away during their hospital stay (1 = expired, 0 = survived). This will be used for classification tasks.
+
+**LOS (Length of Stay):** A continuous variable representing the total number of days a patient stayed in the hospital. This will be used for regression tasks aimed at predicting the duration of the patient’s stay.
+
+
+##### Dependent Variables
+
+
+
+```{r}
+train_x = read.csv("mimic_data/mimic_train_x.csv")
+train_y = read.csv("mimic_data/mimic_train_y.csv")
+test_x = read.csv("mimic_data/mimic_test_x.csv")
+test_y = read.csv("mimic_data/mimic_test_y.csv")
 ```
 
 ```{r}
-x_train <- read_csv("mimic_data/mimic_train_X.csv")
-y_train <- read_csv("mimic_data/mimic_train_y.csv")
-view(x_train)
+train_y <- train_y %>% select(-X, -HOSPITAL_EXPIRE_FLAG)
 ```
 
+
+```{r}
+train_df <- merge(train_x, train_y, by = "icustay_id")
+head(train_df)
+```
+
+
+```{r}
+clean_df <- function(df) {
+  df$DOB <- as.Date(df$DOB)
+  df$ADMITTIME <- as.POSIXct(df$ADMITTIME, format="%Y-%m-%d %H:%M:%S")
+
+  df$AGE <- as.numeric(difftime(df$ADMITTIME, df$DOB, units = "days")) / 365.25
+
+  df <- df %>% select(-c(DOB, ADMITTIME))
+
+  categorical_cols <- c("GENDER", "ADMISSION_TYPE", "INSURANCE", "RELIGION", 
+                      "MARITAL_STATUS", "ETHNICITY", "DIAGNOSIS", 
+                      "ICD9_diagnosis", "FIRST_CAREUNIT")
+
+  df <- df %>% mutate(across(all_of(categorical_cols), ~ as.numeric(as.factor(.))))
+}
+
+clean_df(train_df)
+
+```
+
+
+```{r}
+summary(train_df)
+```
+
+```{r}
+colSums(is.na(train_df))
+```
+
+
+```{r}
+train_df <- subset(train_df, LOS >= 0 & LOS <= 70)
+summary(train_df$LOS)
+```
+
+```{r}
+#summary(train_df)
+
+ggplot(train_df, aes(x = LOS)) + 
+  geom_histogram(binwidth = .5, fill = "blue", color = "black") + 
+  theme_minimal() +
+  labs(title = "Distribution of Length of Stay", x = "Length of Stay (days)", y = "Count")
+
+```
+
+ggplot(train_df, aes(x = factor(HOSPITAL_EXPIRE_FLAG))) + 
+  geom_bar(fill = "blue") + 
+  theme_minimal() +
+  labs(title = "Distribution of Hospital Expire Flag", x = "Hospital Expire Flag", y = "Count")
+
+
+
+
+```{r}
+plot(train_df$LOS, train_df$HeartRate_Mean,
+     main = "Scatter Plot: LOS vs HeartRate_Mean",
+     xlab = "Length of Stay (LOS) in Days",
+     ylab = "Heart Rate Mean",
+     col = "blue", pch = 19)
+
+plot(train_df$LOS, train_df$SysBP_Mean,
+     main = "Scatter Plot: LOS vs SysBP_Mean",
+     xlab = "Length of Stay (LOS) in Days",
+     ylab = "Systolic Blood Pressure Mean",
+     col = "red", pch = 19)
+
+plot(train_df$LOS, train_df$RespRate_Mean,
+     main = "Scatter Plot: LOS vs RespRate_Mean",
+     xlab = "Length of Stay (LOS) in Days",
+     ylab = "Respiratory Rate Mean",
+     col = "purple", pch = 19)
+
+plot(train_df$LOS, train_df$TempC_Mean,
+     main = "Scatter Plot: LOS vs TempC_Mean",
+     xlab = "Length of Stay (LOS) in Days",
+     ylab = "Temperature Mean (C)",
+     col = "green", pch = 19)
+```
+
+
+boxplot(train_df$HeartRate_Mean ~ train_df$HOSPITAL_EXPIRE_FLAG,
+        main = "Heart Rate Mean by Hospital Expire Flag",
+        xlab = "Hospital Expire Flag (0 = Survived, 1 = Death)",
+        ylab = "Heart Rate Mean",
+        col = c("lightblue", "lightcoral"))
+
+boxplot(train_df$SysBP_Mean ~ train_df$HOSPITAL_EXPIRE_FLAG,
+        main = "Systolic Blood Pressure Mean by Hospital Expire Flag",
+        xlab = "Hospital Expire Flag (0 = Survived, 1 = Expired)",
+        ylab = "Systolic Blood Pressure Mean",
+        col = c("lightblue", "lightcoral"))
+
+boxplot(train_df$TempC_Mean ~ train_df$HOSPITAL_EXPIRE_FLAG,
+        main = "Temperature Mean by Hospital Expire Flag",
+        xlab = "Hospital Expire Flag (0 = Survived, 1 = Expired)",
+        ylab = "Temperature Mean (C)",
+        col = c("lightblue", "lightcoral"))
+
+boxplot(train_df$RespRate_Mean ~ train_df$HOSPITAL_EXPIRE_FLAG,
+        main = "Respiratory Rate Mean by Hospital Expire Flag",
+        xlab = "Hospital Expire Flag (0 = Survived, 1 = Expired)",
+        ylab = "Respiratory Rate Mean",
+        col = c("lightblue", "lightcoral"))
+
+
+
+
+Data Partition
+
+set.seed(123)  
+train_df_train <- createDataPartition(train_df$HOSPITAL_EXPIRE_FLAG, p = 0.8, list = FALSE)
+
+
+```{r}
+model <- lm(LOS ~ HeartRate_Mean + SysBP_Mean + DiasBP_Mean + RespRate_Mean + TempC_Mean +
+              SpO2_Mean + Glucose_Mean + GENDER + ADMISSION_TYPE + INSURANCE +
+              RELIGION + MARITAL_STATUS + ETHNICITY + DIAGNOSIS + ICD9_diagnosis + 
+              FIRST_CAREUNIT, data = train_df)
+
+summary(model)
+```
 
