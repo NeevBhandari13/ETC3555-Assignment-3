@@ -210,9 +210,43 @@ set.seed(123)
 train_df_train <- createDataPartition(train_df$HOSPITAL_EXPIRE_FLAG, p = 0.8, list = FALSE)
 
 
-```{r}
+
 model <- lm(LOS ~ HeartRate_Mean + SysBP_Mean + DiasBP_Mean + RespRate_Mean + TempC_Mean + SpO2_Mean + Glucose_Mean + GENDER + ADMISSION_TYPE + INSURANCE + RELIGION + MARITAL_STATUS + ETHNICITY + DIAGNOSIS + ICD9_diagnosis + FIRST_CAREUNIT, data = train_df)
 
 summary(model)
+
+```{r}
+model <- lm(LOS ~ HeartRate_Mean + SysBP_Mean + DiasBP_Mean + RespRate_Mean + TempC_Mean + SpO2_Mean + Glucose_Mean + GENDER + ADMISSION_TYPE + INSURANCE + RELIGION + MARITAL_STATUS + ETHNICITY + FIRST_CAREUNIT, data = train_df)
+summary(model)
 ```
+
+
+Testing Linear Model
+
+```{r}
+test_df <- merge(test_x, test_y, by = "icustay_id")
+```
+
+```{r}
+clean_df(test_df)
+```
+
+```{r}
+predicted_los <- predict(model, newdata = test_df)
+
+# Add the predicted values to the test dataframe
+test_df$Predicted_LOS <- predicted_los
+
+# View the results
+head(test_df[, c("LOS", "Predicted_LOS")])
+```
+
+```{r}
+rmse <- sqrt(mean((test_df$LOS - test_df$Predicted_LOS)^2))
+print(paste("Root Mean Squared Error (RMSE):", rmse))
+```
+
+
+
+
 
