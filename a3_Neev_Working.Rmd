@@ -211,10 +211,7 @@ train_df_train <- createDataPartition(train_df$HOSPITAL_EXPIRE_FLAG, p = 0.8, li
 
 
 ```{r}
-model <- lm(LOS ~ HeartRate_Mean + SysBP_Mean + DiasBP_Mean + RespRate_Mean + TempC_Mean +
-              SpO2_Mean + Glucose_Mean + GENDER + ADMISSION_TYPE + INSURANCE +
-              RELIGION + MARITAL_STATUS + ETHNICITY + DIAGNOSIS + ICD9_diagnosis + 
-              FIRST_CAREUNIT, data = train_df)
+model <- lm(LOS ~ HeartRate_Mean + SysBP_Mean + DiasBP_Mean + RespRate_Mean + TempC_Mean + SpO2_Mean + Glucose_Mean + GENDER + ADMISSION_TYPE + INSURANCE + RELIGION + MARITAL_STATUS + ETHNICITY + DIAGNOSIS + ICD9_diagnosis + FIRST_CAREUNIT, data = train_df)
 
 summary(model)
 ```
