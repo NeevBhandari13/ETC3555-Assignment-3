@@ -81,10 +81,10 @@ Two possible target variables (dependent variables) are of interest in this anal
 
 
 ```{r}
-train_x = read.csv("mimic_train_x.csv")
-train_y = read.csv("mimic_train_y.csv")
-test_x = read.csv("mimic_test_x.csv")
-test_y = read.csv("mimic_test_y.csv")
+train_x = read.csv("mimic_data/mimic_train_x.csv")
+train_y = read.csv("mimic_data/mimic_train_y.csv")
+test_x = read.csv("mimic_data/mimic_test_x.csv")
+test_y = read.csv("mimic_data/mimic_test_y.csv")
 ```
 
 ```{r}
@@ -252,13 +252,11 @@ print(paste("Root Mean Squared Error (RMSE):", rmse))
 # Neural Network
 
 ```{r}
-clean_df(train_x)
+train_x <- clean_df(train_x)
 ```
 
 
 ```{r}
-
-train_x <- clean_df(train_x)
 
 model <- keras_model_sequential()
 model %>%
@@ -282,4 +280,10 @@ plot(history)
 
 
 
+# Debugging nueral
+
+```{r}
+dim(train_x)
+model$input_shape
+```
 
