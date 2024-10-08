@@ -242,11 +242,45 @@ head(test_df[, c("LOS", "Predicted_LOS")])
 ```
 
 ```{r}
-rmse <- sqrt(mean((test_df$LOS - test_df$Predicted_LOS)^2))
-print(paste("Root Mean Squared Error (RMSE):", rmse))
+test_model <- function(model, test_df) {
+  predicted_los <- predict(model, newdata = test_df)
+  rmse <- sqrt(mean((test_df$LOS - test_df$Predicted_LOS)^2))
+  print(paste("Out of sample error:", rmse))
+}
+
+test_model(model, test_df)
+
+```
+
+Non-linear transforms
+
+First, I will plot each numerical variable against length of stay to see if I can spot any patterns.
+
+```{r}
+predictors <- c("HeartRate_Mean", "SysBP_Mean", "DiasBP_Mean", "RespRate_Mean", "TempC_Mean", "SpO2_Mean", "Glucose_Mean")
+
+# Generate individual scatter plots
+for (variable in predictors) {
+  p <- ggplot(train_df, aes_string(x = variable, y = "LOS")) +
+    geom_point(alpha = 0.5, color = "blue") +
+    theme_minimal() +
+    labs(title = paste(variable, "vs LOS"), x = variable, y = "Length of Stay (LOS)")
+  print(p)
+}
+
 ```
 
 
+```{r}
+model_poly <- lm(LOS ~ poly(HeartRate_Mean, 2) + poly(SysBP_Mean, 2) + 
+                       poly(RespRate_Mean, 2) + TempC_Mean + SpO2_Mean + 
+                       Glucose_Mean + GENDER + ADMISSION_TYPE + INSURANCE + 
+                       RELIGION + MARITAL_STATUS + ETHNICITY + FIRST_CAREUNIT, data = train_df)
 
+summary(model_poly)
+
+test_model(model_poly, test_df)
+
+```
 
 
