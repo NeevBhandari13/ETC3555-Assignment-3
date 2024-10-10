@@ -258,6 +258,8 @@ train_x <- clean_df(train_x)
 
 ```{r}
 
+ncol(train_x)
+
 model <- keras_model_sequential()
 model %>%
   layer_dense(units = 64, activation = 'relu',

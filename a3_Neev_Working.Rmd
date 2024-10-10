@@ -7,6 +7,7 @@
 library(dplyr)
 library(ggplot2)
 library(caret)
+library(glmnet)
 ```
 
 
@@ -242,13 +243,20 @@ head(test_df[, c("LOS", "Predicted_LOS")])
 ```
 
 ```{r}
-test_model <- function(model, test_df) {
-  predicted_los <- predict(model, newdata = test_df)
-  rmse <- sqrt(mean((test_df$LOS - test_df$Predicted_LOS)^2))
-  print(paste("Out of sample error:", rmse))
+test_model <- function(model, test_df, train_df) {
+  train_df$Predicted_LOS <- predict(model, newdata = train_df)
+  
+  in_sample_rmse <- sqrt(mean((train_df$LOS - train_df$Predicted_LOS)^2))
+  
+  test_df$Predicted_LOS <- predict(model, newdata = test_df)
+  
+  out_of_sample_rmse <- sqrt(mean((test_df$LOS - test_df$Predicted_LOS)^2))
+  
+  print(paste("In-sample error (RMSE):", in_sample_rmse))
+  print(paste("Out-of-sample error (RMSE):", out_of_sample_rmse))
 }
 
-test_model(model, test_df)
+test_model(model, test_df, train_df)
 
 ```
 
@@ -259,12 +267,21 @@ First, I will plot each numerical variable against length of stay to see if I ca
 ```{r}
 predictors <- c("HeartRate_Mean", "SysBP_Mean", "DiasBP_Mean", "RespRate_Mean", "TempC_Mean", "SpO2_Mean", "Glucose_Mean")
 
-# Generate individual scatter plots
+# Generate individual scatter plots for mean values
 for (variable in predictors) {
-  p <- ggplot(train_df, aes_string(x = variable, y = "LOS")) +
-    geom_point(alpha = 0.5, color = "blue") +
+  # Group by the predictor and calculate the mean LOS
+  mean_df <- train_df %>%
+    group_by_at(variable) %>%
+    summarise(mean_LOS = mean(LOS, na.rm = TRUE)) %>%
+    ungroup()
+
+  # Plot the mean LOS for each unique value of the predictor
+  p <- ggplot(mean_df, aes_string(x = variable, y = "mean_LOS")) +
+    geom_point(alpha = 0.8, color = "blue") +
     theme_minimal() +
-    labs(title = paste(variable, "vs LOS"), x = variable, y = "Length of Stay (LOS)")
+    labs(title = paste(variable, "Mean vs LOS"), x = variable, y = "Mean Length of Stay (LOS)") +
+    geom_smooth(method = "loess", color = "red", se = FALSE)  
+
   print(p)
 }
 
@@ -273,14 +290,14 @@ for (variable in predictors) {
 
 ```{r}
 model_poly <- lm(LOS ~ poly(HeartRate_Mean, 2) + poly(SysBP_Mean, 2) + 
-                       poly(RespRate_Mean, 2) + TempC_Mean + SpO2_Mean + 
-                       Glucose_Mean + GENDER + ADMISSION_TYPE + INSURANCE + 
+                       poly(RespRate_Mean, 2) + poly(TempC_Mean, 2) + poly(SpO2_Mean, 2) + 
+                       poly(Glucose_Mean, 3) + GENDER + ADMISSION_TYPE + INSURANCE + 
                        RELIGION + MARITAL_STATUS + ETHNICITY + FIRST_CAREUNIT, data = train_df)
 
 summary(model_poly)
 
-test_model(model_poly, test_df)
+test_model(model_poly, test_df, train_df)
 
 ```
-
+Looking at the 
 
