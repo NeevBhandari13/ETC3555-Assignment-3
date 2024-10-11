@@ -8,6 +8,10 @@ library(dplyr)
 library(ggplot2)
 library(caret)
 library(glmnet)
+library(keras)
+library(tensorflow)
+library(reticulate)
+py_config()
 ```
 
 
@@ -246,14 +250,14 @@ head(test_df[, c("LOS", "Predicted_LOS")])
 test_model <- function(model, test_df, train_df) {
   train_df$Predicted_LOS <- predict(model, newdata = train_df)
   
-  in_sample_rmse <- sqrt(mean((train_df$LOS - train_df$Predicted_LOS)^2))
+  in_sample_mse <- mean((train_df$LOS - train_df$Predicted_LOS)^2)
   
   test_df$Predicted_LOS <- predict(model, newdata = test_df)
   
-  out_of_sample_rmse <- sqrt(mean((test_df$LOS - test_df$Predicted_LOS)^2))
+  out_of_sample_mse <- mean((test_df$LOS - test_df$Predicted_LOS)^2)
   
-  print(paste("In-sample error (RMSE):", in_sample_rmse))
-  print(paste("Out-of-sample error (RMSE):", out_of_sample_rmse))
+  print(paste("In-sample error (MSE):", in_sample_mse))
+  print(paste("Out-of-sample error (MSE):", out_of_sample_mse))
 }
 
 test_model(model, test_df, train_df)
@@ -300,4 +304,45 @@ test_model(model_poly, test_df, train_df)
 
 ```
 Looking at the 
+
+
+NEURAL NETWORK
+
+```{r}
+train_x <- train_df %>% select(-LOS, -subject_id, -hadm_id, -icustay_id)  # Remove ID columns and target variable
+train_y <- train_df$LOS
+
+test_x <- test_df %>% select(-LOS, -subject_id, -hadm_id, -icustay_id)    # Remove ID columns and target variable
+test_y <- test_df$LOS
+
+```
+
+
+
+```{r}
+
+nn <- keras_model_sequential()
+nn %>% 
+  layer_dense(units = 64, activation = 'relu', input_shape = ncol(train_x)) %>%
+  layer_dense(units = 1, activation = 'linear')
+
+summary(nn)
+```
+
+```{r}
+nn %>% compile(
+  loss = 'mse',
+  optimizer = 'adam'
+)
+```
+
+```{r}
+history <- nn %>% fit(
+  train_x, train_y,
+  epochs = 30, batch_size = 128
+)
+```
+
+
+
 
