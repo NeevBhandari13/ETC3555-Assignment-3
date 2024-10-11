@@ -8,11 +8,22 @@ library(dplyr)
 library(ggplot2)
 library(caret)
 library(glmnet)
+library(reticulate)
+library(keras3)
+#keras::install_keras(tensorflow = "2.17")
+```
+
+library(reticulate)
+virtualenv_install(envname = "r-reticulate", packages = c("keras", "tensorflow", "numpy"))
 library(keras)
 library(tensorflow)
-library(reticulate)
+
+# Check if tensorflow is working
+tf$constant("Hello TensorFlow!")
 py_config()
-```
+
+
+
 
 
 ####  Predictor Variables (X)
@@ -100,25 +111,41 @@ train_y <- train_y %>% select(-X, -HOSPITAL_EXPIRE_FLAG)
 train_df <- merge(train_x, train_y, by = "icustay_id")
 head(train_df)
 ```
+```{r}
+test_df <- merge(test_x, test_y, by = "icustay_id")
+```
 
 
 ```{r}
 clean_df <- function(df) {
+  # Convert date columns to Date and POSIXct format
   df$DOB <- as.Date(df$DOB)
   df$ADMITTIME <- as.POSIXct(df$ADMITTIME, format="%Y-%m-%d %H:%M:%S")
-
+  
+  # Calculate the patient's age and remove date columns
   df$AGE <- as.numeric(difftime(df$ADMITTIME, df$DOB, units = "days")) / 365.25
-
-  df <- df %>% select(-c(DOB, ADMITTIME))
-
+  df <- df %>% select(-c(DOB, ADMITTIME))  # Drop the date columns
+  
+  # List of categorical columns to one-hot encode
   categorical_cols <- c("GENDER", "ADMISSION_TYPE", "INSURANCE", "RELIGION", 
-                      "MARITAL_STATUS", "ETHNICITY", "DIAGNOSIS", 
-                      "ICD9_diagnosis", "FIRST_CAREUNIT")
-
-  df <- df %>% mutate(across(all_of(categorical_cols), ~ as.numeric(as.factor(.))))
+                        "MARITAL_STATUS", "ETHNICITY", "DIAGNOSIS", 
+                        "ICD9_diagnosis", "FIRST_CAREUNIT")
+  
+  # One-hot encode categorical variables
+  df <- df %>%
+    mutate(across(all_of(categorical_cols), as.factor))  # Convert to factors
+  
+  # Create one-hot encoding for categorical variables and keep numeric ones intact
+  df_numeric <- model.matrix(~ . - 1, data = df) %>%  # Create dummy variables and remove intercept
+    as.data.frame()
+  
+  return(df_numeric)
 }
 
+
 clean_df(train_df)
+
+clean_df(test_df)
 
 ```
 
@@ -228,13 +255,7 @@ summary(model)
 
 Testing Linear Model
 
-```{r}
-test_df <- merge(test_x, test_y, by = "icustay_id")
-```
 
-```{r}
-clean_df(test_df)
-```
 
 ```{r}
 predicted_los <- predict(model, newdata = test_df)
@@ -309,10 +330,10 @@ Looking at the
 NEURAL NETWORK
 
 ```{r}
-train_x <- train_df %>% select(-LOS, -subject_id, -hadm_id, -icustay_id)  # Remove ID columns and target variable
+train_x <- model.matrix(~ . - 1, data = train_df %>% select(-LOS))   # Remove ID columns and target variable
 train_y <- train_df$LOS
 
-test_x <- test_df %>% select(-LOS, -subject_id, -hadm_id, -icustay_id)    # Remove ID columns and target variable
+test_x <- model.matrix(~ . - 1, data = test_df %>% select(-LOS))    # Remove ID columns and target variable
 test_y <- test_df$LOS
 
 ```
@@ -337,9 +358,15 @@ nn %>% compile(
 ```
 
 ```{r}
+dim(train_x)
+dim(train_y)
+```
+
+
+```{r}
 history <- nn %>% fit(
   train_x, train_y,
-  epochs = 30, batch_size = 128
+  epochs = 10, batch_size = 128
 )
 ```
 
