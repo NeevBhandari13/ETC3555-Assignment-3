@@ -160,7 +160,8 @@ train_y <- train_df_nn %>% select(LOS)  # Target variable
 test_x <- test_df_nn %>% select(-LOS)  # Remove target variable LOS
 test_y <- test_df_nn %>% select(LOS)  # Target variable
 
-
+train_x <- scale(train_x)
+test_x <- scale(test_x)
 
 dim(train_df)
 dim(train_x)
@@ -351,25 +352,37 @@ dim(train_df_nn)
 # Find missing columns in test_x that are present in train_x
 missing_cols <- setdiff(colnames(train_x), colnames(test_x))
 
-# Add the missing columns to test_x, initializing them to 0
-for (col in missing_cols) {
-  test_x <- cbind(test_x, matrix(0, nrow = nrow(test_x), ncol = 1))
-  colnames(test_x)[ncol(test_x)] <- col
-}
+# Create a matrix of zeros with the same number of rows as test_x and as many columns as there are missing_cols
+missing_matrix <- matrix(0, nrow = nrow(test_x), ncol = length(missing_cols))
+
+# Set the column names of the new matrix to the missing column names
+colnames(missing_matrix) <- missing_cols
+
+# Bind the missing columns to test_x in one step
+test_x <- cbind(test_x, missing_matrix)
 
 # Ensure the columns in test_x are in the same order as in train_x
 test_x <- test_x[, colnames(train_x)]
 
+
 ```
 
+```{r}
+# Convert train_x and train_y to matrix and numeric types
+train_x <- as.matrix(train_x)
+train_y <- as.matrix(train_y)
 
+# Similarly, for test data
+test_x <- as.matrix(test_x)
+test_y <- as.matrix(test_y)
+```
 
 ```{r}
 nn <- keras_model_sequential()
 
 # Adding L2 regularization to both hidden layer and output layer
 nn %>% 
-  layer_dense(units = 64, activation = 'relu', 
+  layer_dense(units = 16, activation = 'relu', 
               input_shape = ncol(train_x), 
               kernel_regularizer = regularizer_l2(0.001)) %>%  # L2 regularization
   layer_dense(units = 1, activation = 'linear', 
@@ -386,34 +399,10 @@ nn %>% compile(
 ```
 
 ```{r}
-# Convert train_x and train_y to matrix and numeric types
-train_x <- as.matrix(train_x)
-train_y <- as.matrix(train_y)
-
-# Similarly, for test data
-test_x <- as.matrix(test_x)
-test_y <- as.matrix(test_y)
-```
-
-```{r}
-dim(train_df_nn)
-dim(train_x)
-length(train_y)
-
-any(is.na(train_x))  # Should return FALSE
-any(is.na(train_y))  # Should return FALSE
-```
-
-```{r}
 history <- nn %>% fit(
   train_x, train_y,
   epochs = 10, batch_size = 128
 )
-```
-
-```{r}
-dim(test_x)
-dim(test_y)
 ```
 
 ```{r}
@@ -430,14 +419,50 @@ DEEP NEURAL NETWORK
 ```{r}
 dnn <- keras_model_sequential()
 
-# Adding L2 regularization to both hidden layer and output layer
+# Adding L2 regularization and Dropout for regularization
 dnn %>% 
-  layer_dense(units = 64, activation = 'relu', 
+  # First hidden layer with 128 units, L2 regularization, and ReLU activation
+  layer_dense(units = 128, activation = 'relu', 
               input_shape = ncol(train_x), 
-              kernel_regularizer = regularizer_l2(0.001)) %>%  # L2 regularization
+              kernel_regularizer = regularizer_l2(0.001)) %>%
+  layer_dropout(rate = 0.3) %>%  # Dropout to reduce overfitting
+  
+  # Second hidden layer with 64 units, L2 regularization, and ReLU activation
+  layer_dense(units = 64, activation = 'relu', 
+              kernel_regularizer = regularizer_l2(0.001)) %>%
+  layer_dropout(rate = 0.3) %>%  # Another Dropout layer
+  
+  # Third hidden layer with 32 units, L2 regularization, and ReLU activation
+  layer_dense(units = 32, activation = 'relu', 
+              kernel_regularizer = regularizer_l2(0.001)) %>%
+  
+  # Output layer with 1 unit (for regression) and linear activation
   layer_dense(units = 1, activation = 'linear', 
               kernel_regularizer = regularizer_l2(0.001))  # L2 regularization for output
 
-summary(nn)
+# Display summary of the model
+summary(dnn)
+```
+
+```{r}
+dnn %>% compile(
+  loss = 'mse',
+  optimizer = 'adam'
+)
+```
+
+```{r}
+history <- dnn %>% fit(
+  train_x, train_y,
+  epochs = 10, batch_size = 128
+)
+```
+
+```{r}
+predicted_y <- predict(dnn, test_x)
+
+mse <- mean((test_y - predicted_y)^2)
+
+print(paste("Test MSE:", mse))
 ```
 
