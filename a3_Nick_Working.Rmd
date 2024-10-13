@@ -1,14 +1,31 @@
 
 ```{r}
 #file.choose()
+SEED <- 1
 ```
 
 ```{r, message=FALSE}
+library(tidyverse)
 library(dplyr)
 library(ggplot2)
 library(caret)
-library(keras)
+library(glmnet)
+library(reticulate)
+library(keras3)
+#keras::install_keras(tensorflow = "2.17")
 ```
+
+library(reticulate)
+virtualenv_install(envname = "r-reticulate", packages = c("keras", "tensorflow", "numpy"))
+library(keras)
+library(tensorflow)
+
+# Check if tensorflow is working
+tf$constant("Hello TensorFlow!")
+py_config()
+
+
+
 
 
 ####  Predictor Variables (X)
@@ -89,17 +106,12 @@ test_y = read.csv("mimic_data/mimic_test_y.csv")
 
 ```{r}
 train_y <- train_y %>% select(-X, -HOSPITAL_EXPIRE_FLAG)
+test_y <- test_y %>% select(-X, -HOSPITAL_EXPIRE_FLAG)
 ```
 
-
 ```{r}
-train_df <- merge(train_x, train_y, by = "icustay_id")
-head(train_df)
-```
 
-
-```{r}
-clean_df <- function(df) {
+clean_df_lm <- function(df) {
   df$DOB <- as.Date(df$DOB)
   df$ADMITTIME <- as.POSIXct(df$ADMITTIME, format="%Y-%m-%d %H:%M:%S")
 
@@ -115,29 +127,61 @@ clean_df <- function(df) {
   
 }
 
-clean_df(train_df)
+
+
+clean_df_nn <- function(df) {
+  # Convert date columns to Date and POSIXct format
+  df$DOB <- as.Date(df$DOB)
+  df$ADMITTIME <- as.POSIXct(df$ADMITTIME, format="%Y-%m-%d %H:%M:%S")
+  
+  # Calculate the patient's age and remove date columns
+  df$AGE <- as.numeric(difftime(df$ADMITTIME, df$DOB, units = "days")) / 365.25
+  df <- df %>% select(-c(DOB, ADMITTIME))  # Drop the date columns
+  
+  # Use model.matrix for both numeric and categorical variables, no need to convert to factor manually
+  df_numeric <- model.matrix(~ . - 1, data = df) %>%  # Create dummy variables and remove intercept
+    as.data.frame()
+  
+  return(df_numeric)
+}
+
+# Step 1: Preprocess the training and test datasets for lm
+train_df_lm <- clean_df_lm(merge(train_x, train_y, by = "icustay_id"))
+test_df_lm <- clean_df_lm(merge(test_x, test_y, by = "icustay_id"))
+
+# Step 1: Preprocess the training and test datasets for nn
+train_df_nn <- clean_df_nn(merge(train_x, train_y, by = "icustay_id"))
+test_df_nn <- clean_df_nn(merge(test_x, test_y, by = "icustay_id"))
+
+
+# Clean the training and test datasets using clean_df
+train_x <- train_df_nn %>% select(-LOS) # Remove target variable LOS
+train_y <- train_df_nn %>% select(LOS)  # Target variable
+
+test_x <- test_df_nn %>% select(-LOS)  # Remove target variable LOS
+test_y <- test_df_nn %>% select(LOS)  # Target variable
+
+train_x <- scale(train_x)
+test_x <- scale(test_x)
+
+dim(train_df)
+dim(train_x)
+dim(train_y)
 
 ```
 
 
-```{r}
-summary(train_df)
-```
-
-```{r}
-colSums(is.na(train_df))
-```
 
 
 ```{r}
-train_df <- subset(train_df, LOS >= 0 & LOS <= 70)
-summary(train_df$LOS)
+train_df_lm <- subset(train_df_lm, LOS >= 0 & LOS <= 70)
+summary(train_df_lm$LOS)
 ```
 
 ```{r}
 #summary(train_df)
 
-ggplot(train_df, aes(x = LOS)) + 
+ggplot(train_df_lm, aes(x = LOS)) + 
   geom_histogram(binwidth = .5, fill = "blue", color = "black") + 
   theme_minimal() +
   labs(title = "Distribution of Length of Stay", x = "Length of Stay (days)", y = "Count")
@@ -153,25 +197,25 @@ ggplot(train_df, aes(x = factor(HOSPITAL_EXPIRE_FLAG))) +
 
 
 ```{r}
-plot(train_df$LOS, train_df$HeartRate_Mean,
+plot(train_df_lm$LOS, train_df_lm$HeartRate_Mean,
      main = "Scatter Plot: LOS vs HeartRate_Mean",
      xlab = "Length of Stay (LOS) in Days",
      ylab = "Heart Rate Mean",
      col = "blue", pch = 19)
 
-plot(train_df$LOS, train_df$SysBP_Mean,
+plot(train_df_lm$LOS, train_df_lm$SysBP_Mean,
      main = "Scatter Plot: LOS vs SysBP_Mean",
      xlab = "Length of Stay (LOS) in Days",
      ylab = "Systolic Blood Pressure Mean",
      col = "red", pch = 19)
 
-plot(train_df$LOS, train_df$RespRate_Mean,
+plot(train_df_lm$LOS, train_df_lm$RespRate_Mean,
      main = "Scatter Plot: LOS vs RespRate_Mean",
      xlab = "Length of Stay (LOS) in Days",
      ylab = "Respiratory Rate Mean",
      col = "purple", pch = 19)
 
-plot(train_df$LOS, train_df$TempC_Mean,
+plot(train_df_lm$LOS, train_df_lm$TempC_Mean,
      main = "Scatter Plot: LOS vs TempC_Mean",
      xlab = "Length of Stay (LOS) in Days",
      ylab = "Temperature Mean (C)",
@@ -179,25 +223,25 @@ plot(train_df$LOS, train_df$TempC_Mean,
 ```
 
 
-boxplot(train_df$HeartRate_Mean ~ train_df$HOSPITAL_EXPIRE_FLAG,
+boxplot(train_df_lm$HeartRate_Mean ~ train_df_lm$HOSPITAL_EXPIRE_FLAG,
         main = "Heart Rate Mean by Hospital Expire Flag",
         xlab = "Hospital Expire Flag (0 = Survived, 1 = Death)",
         ylab = "Heart Rate Mean",
         col = c("lightblue", "lightcoral"))
 
-boxplot(train_df$SysBP_Mean ~ train_df$HOSPITAL_EXPIRE_FLAG,
+boxplot(train_df_lm$SysBP_Mean ~ train_df_lm$HOSPITAL_EXPIRE_FLAG,
         main = "Systolic Blood Pressure Mean by Hospital Expire Flag",
         xlab = "Hospital Expire Flag (0 = Survived, 1 = Expired)",
         ylab = "Systolic Blood Pressure Mean",
         col = c("lightblue", "lightcoral"))
 
-boxplot(train_df$TempC_Mean ~ train_df$HOSPITAL_EXPIRE_FLAG,
+boxplot(train_df_lm$TempC_Mean ~ train_df_lm$HOSPITAL_EXPIRE_FLAG,
         main = "Temperature Mean by Hospital Expire Flag",
         xlab = "Hospital Expire Flag (0 = Survived, 1 = Expired)",
         ylab = "Temperature Mean (C)",
         col = c("lightblue", "lightcoral"))
 
-boxplot(train_df$RespRate_Mean ~ train_df$HOSPITAL_EXPIRE_FLAG,
+boxplot(train_df_lm$RespRate_Mean ~ train_df_lm$HOSPITAL_EXPIRE_FLAG,
         main = "Respiratory Rate Mean by Hospital Expire Flag",
         xlab = "Hospital Expire Flag (0 = Survived, 1 = Expired)",
         ylab = "Respiratory Rate Mean",
@@ -209,83 +253,241 @@ boxplot(train_df$RespRate_Mean ~ train_df$HOSPITAL_EXPIRE_FLAG,
 Data Partition
 
 set.seed(123)  
-train_df_train <- createDataPartition(train_df$HOSPITAL_EXPIRE_FLAG, p = 0.8, list = FALSE)
+train_df_lm_train <- createDataPartition(train_df_lm$HOSPITAL_EXPIRE_FLAG, p = 0.8, list = FALSE)
 
 
 
-model <- lm(LOS ~ HeartRate_Mean + SysBP_Mean + DiasBP_Mean + RespRate_Mean + TempC_Mean + SpO2_Mean + Glucose_Mean + GENDER + ADMISSION_TYPE + INSURANCE + RELIGION + MARITAL_STATUS + ETHNICITY + DIAGNOSIS + ICD9_diagnosis + FIRST_CAREUNIT, data = train_df)
+model <- lm(LOS ~ HeartRate_Mean + SysBP_Mean + DiasBP_Mean + RespRate_Mean + TempC_Mean + SpO2_Mean + Glucose_Mean + GENDER + ADMISSION_TYPE + INSURANCE + RELIGION + MARITAL_STATUS + ETHNICITY + DIAGNOSIS + ICD9_diagnosis + FIRST_CAREUNIT, data = train_df_lm)
 
 summary(model)
 
 ```{r}
-model <- lm(LOS ~ HeartRate_Mean + SysBP_Mean + DiasBP_Mean + RespRate_Mean + TempC_Mean + SpO2_Mean + Glucose_Mean + GENDER + ADMISSION_TYPE + INSURANCE + RELIGION + MARITAL_STATUS + ETHNICITY + FIRST_CAREUNIT, data = train_df)
+model <- lm(LOS ~ HeartRate_Mean + SysBP_Mean + DiasBP_Mean + RespRate_Mean + TempC_Mean + SpO2_Mean + Glucose_Mean + GENDER + ADMISSION_TYPE + INSURANCE + RELIGION + MARITAL_STATUS + ETHNICITY + FIRST_CAREUNIT, data = train_df_lm)
 summary(model)
 ```
 
 
 Testing Linear Model
 
-```{r}
-test_df <- merge(test_x, test_y, by = "icustay_id")
-```
+
 
 ```{r}
-clean_df(test_df)
-```
-
-```{r}
-predicted_los <- predict(model, newdata = test_df)
+predicted_los <- predict(model, newdata = test_df_lm)
 
 # Add the predicted values to the test dataframe
-test_df$Predicted_LOS <- predicted_los
+test_df_lm$Predicted_LOS <- predicted_los
 
 # View the results
-head(test_df[, c("LOS", "Predicted_LOS")])
+head(test_df_lm[, c("LOS", "Predicted_LOS")])
 ```
 
 ```{r}
-rmse <- sqrt(mean((test_df$LOS - test_df$Predicted_LOS)^2))
-print(paste("Root Mean Squared Error (RMSE):", rmse))
+test_model <- function(model, test_df_lm, train_df_lm) {
+  train_df_lm$Predicted_LOS <- predict(model, newdata = train_df_lm)
+  
+  in_sample_mse <- mean((train_df_lm$LOS - train_df_lm$Predicted_LOS)^2)
+  
+  test_df_lm$Predicted_LOS <- predict(model, newdata = test_df_lm)
+  
+  out_of_sample_mse <- mean((test_df_lm$LOS - test_df_lm$Predicted_LOS)^2)
+  
+  print(paste("In-sample error (MSE):", in_sample_mse))
+  print(paste("Out-of-sample error (MSE):", out_of_sample_mse))
+}
+
+test_model(model, test_df_lm, train_df_lm)
+
+```
+
+Non-linear transforms
+
+First, I will plot each numerical variable against length of stay to see if I can spot any patterns.
+
+```{r}
+predictors <- c("HeartRate_Mean", "SysBP_Mean", "DiasBP_Mean", "RespRate_Mean", "TempC_Mean", "SpO2_Mean", "Glucose_Mean")
+
+# Generate individual scatter plots for mean values
+for (variable in predictors) {
+  # Group by the predictor and calculate the mean LOS
+  mean_df <- train_df_lm %>%
+    group_by_at(variable) %>%
+    summarise(mean_LOS = mean(LOS, na.rm = TRUE)) %>%
+    ungroup()
+
+  # Plot the mean LOS for each unique value of the predictor
+  p <- ggplot(mean_df, aes_string(x = variable, y = "mean_LOS")) +
+    geom_point(alpha = 0.8, color = "blue") +
+    theme_minimal() +
+    labs(title = paste(variable, "Mean vs LOS"), x = variable, y = "Mean Length of Stay (LOS)") +
+    geom_smooth(method = "loess", color = "red", se = FALSE)  
+
+  print(p)
+}
+
 ```
 
 
-# Neural Network
+***non-linear transformation model
 
 ```{r}
-train_x <- clean_df(train_x)
+model_non_linear <- lm(LOS ~ HeartRate_Mean + SysBP_Mean + DiasBP_Mean + RespRate_Mean + exp(TempC_Mean) + exp(SpO2_Mean) + log(Glucose_Mean) + GENDER + ADMISSION_TYPE + INSURANCE + RELIGION + MARITAL_STATUS + ETHNICITY + FIRST_CAREUNIT, data = train_df_lm)
+
+summary(model_non_linear)
+
+test_model(model_non_linear, test_df_lm, train_df_lm)
 ```
 
 
+NEURAL NETWORK
+
+
 ```{r}
 
-ncol(train_x)
+# Find missing columns in test_x that are present in train_x
+missing_cols <- setdiff(colnames(train_x), colnames(test_x))
 
-model <- keras_model_sequential()
-model %>%
-  layer_dense(units = 64, activation = 'relu',
-              input_shape = c(ncol(train_x))) %>%
-  layer_dense(units = 1)
+# Create a matrix of zeros with the same number of rows as test_x and as many columns as there are missing_cols
+missing_matrix <- matrix(0, nrow = nrow(test_x), ncol = length(missing_cols))
 
-model %>%
-  compile(loss = "mean_squared_error",
-          optimizer = optimizer_adam(),
-          metrics = c("mean_absolute_error"))
+# Set the column names of the new matrix to the missing column names
+colnames(missing_matrix) <- missing_cols
 
-history <- model %>%
-  fit(train_x, train_y, epochs = 10, batch_size = 32,
-      validation_split = 0.2, verbose = 1)
+# Bind the missing columns to test_x in one step
+test_x <- cbind(test_x, missing_matrix)
 
-plot(history)
+# Ensure the columns in test_x are in the same order as in train_x
+test_x <- test_x[, colnames(train_x)]
+
+
+```
+
+```{r}
+# Convert train_x and train_y to matrix and numeric types
+train_x <- as.matrix(train_x)
+train_y <- as.matrix(train_y)
+
+# Similarly, for test data
+test_x <- as.matrix(test_x)
+test_y <- as.matrix(test_y)
+```
+
+```{r}
+nn <- keras_model_sequential()
+
+nn %>% 
+  # First hidden layer with 16 units, L2 regularization, and He initializer
+  layer_dense(units = 50, 
+              input_shape = ncol(train_x), 
+              kernel_regularizer = regularizer_l2(0.01), 
+              kernel_initializer = initializer_he_normal(seed = 1),  # He initializer
+              bias_initializer = initializer_zeros()) %>%  # Initialize bias as zeros
+  layer_activation_leaky_relu(alpha = 0.1) %>%  # Leaky ReLU with alpha = 0.1
+  
+  # Output layer with 1 unit (for regression), linear activation, and He initializer
+  layer_dense(units = 1, activation = 'linear', 
+              kernel_regularizer = regularizer_l2(0.01), 
+              kernel_initializer = initializer_he_normal(seed = 1),  # He initializer for output
+              bias_initializer = initializer_zeros())  # Initialize bias as zeros
+
+# Display model summary
+summary(nn)
+
+```
+
+```{r}
+nn %>% compile(
+  loss = 'mse',
+  optimizer = 'adam'
+)
+```
+
+```{r}
+history <- nn %>% fit(
+  train_x, train_y,
+  epochs = 100, batch_size = 128,
+  validation_split = 0.2, 
+  callbacks = list(
+    callback_early_stopping(monitor = "val_loss", patience = 5, restore_best_weights = TRUE)
+  )
+)
+```
+
+```{r}
+predicted_y <- predict(nn, test_x)
+
+mse <- mean((test_y - predicted_y)^2)
+
+print(paste("Test MSE:", mse))
 ```
 
 
-
-
-
-# Debugging nueral
+DEEP NEURAL NETWORK
 
 ```{r}
-dim(train_x)
-model$input_shape
+dnn <- keras_model_sequential()
+
+# Adding L2 regularization, Dropout for regularization, and Leaky ReLU activation
+dnn %>% 
+  # First hidden layer with 128 units, L2 regularization, and He initializer
+  layer_dense(units = 100, 
+              input_shape = ncol(train_x), 
+              kernel_regularizer = regularizer_l2(0.01), 
+              kernel_initializer = initializer_he_normal(seed = 1),  # He initializer
+              bias_initializer = initializer_zeros()) %>%
+  layer_activation_leaky_relu(alpha = 0.1) %>%  # Leaky ReLU activation
+  layer_dropout(rate = 0.2) %>%  # Dropout to reduce overfitting
+  
+  # Second hidden layer with 64 units, L2 regularization, and He initializer
+  layer_dense(units = 50, 
+              kernel_regularizer = regularizer_l2(0.01), 
+              kernel_initializer = initializer_he_normal(seed = 1),  # He initializer
+              bias_initializer = initializer_zeros()) %>%
+  layer_activation_leaky_relu(alpha = 0.1) %>%  # Leaky ReLU activation
+  layer_dropout(rate = 0.5) %>%  # Another Dropout layer
+  
+  # Third hidden layer with 32 units, L2 regularization, and He initializer
+  layer_dense(units = 25, 
+              kernel_regularizer = regularizer_l2(0.01), 
+              kernel_initializer = initializer_he_normal(seed = 1),  # He initializer
+              bias_initializer = initializer_zeros()) %>%
+  layer_activation_leaky_relu(alpha = 0.1) %>%  # Leaky ReLU activation
+  layer_dropout(rate = 0.5) %>%  # Another Dropout layer
+  
+  # Output layer with 1 unit (for regression), linear activation, and He initializer
+  layer_dense(units = 1, activation = 'linear', 
+              kernel_regularizer = regularizer_l2(0.01), 
+              kernel_initializer = initializer_he_normal(seed = 1),  # He initializer
+              bias_initializer = initializer_zeros())  # Initialize bias as zeros
+
+# Display summary of the model
+summary(dnn)
+
+
+```
+
+```{r}
+dnn %>% compile(
+  loss = 'mse',
+  optimizer = 'adam'
+)
+```
+
+```{r}
+history <- dnn %>% fit(
+  train_x, train_y,
+  epochs = 100, batch_size = 50,
+  validation_split = 0.2, 
+  callbacks = list(
+    callback_early_stopping(monitor = "val_loss", patience = 5, restore_best_weights = TRUE)
+  )
+)
+```
+
+```{r}
+predicted_y <- predict(dnn, test_x)
+
+mse <- mean((test_y - predicted_y)^2)
+
+print(paste("Test MSE:", mse))
 ```
 
