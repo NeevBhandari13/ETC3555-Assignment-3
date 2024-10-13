@@ -394,6 +394,7 @@ nn %>%
 # Display model summary
 summary(nn)
 
+
 ```
 
 ```{r}
@@ -431,7 +432,7 @@ dnn <- keras_model_sequential()
 # Adding L2 regularization, Dropout for regularization, and Leaky ReLU activation
 dnn %>% 
   # First hidden layer with 128 units, L2 regularization, and He initializer
-  layer_dense(units = 100, 
+  layer_dense(units = 128, 
               input_shape = ncol(train_x), 
               kernel_regularizer = regularizer_l2(0.1), 
               kernel_initializer = initializer_he_normal(seed = 1),  # He initializer
@@ -440,15 +441,7 @@ dnn %>%
   layer_dropout(rate = 0.2) %>%  # Dropout to reduce overfitting
   
   # Second hidden layer with 64 units, L2 regularization, and He initializer
-  layer_dense(units = 50, 
-              kernel_regularizer = regularizer_l2(0.1), 
-              kernel_initializer = initializer_he_normal(seed = 1),  # He initializer
-              bias_initializer = initializer_zeros()) %>%
-  layer_activation_leaky_relu(alpha = 0.1) %>%  # Leaky ReLU activation
-  layer_dropout(rate = 0.5) %>%  # Another Dropout layer
-  
-  # Third hidden layer with 32 units, L2 regularization, and He initializer
-  layer_dense(units = 25, 
+  layer_dense(units = 128, 
               kernel_regularizer = regularizer_l2(0.1), 
               kernel_initializer = initializer_he_normal(seed = 1),  # He initializer
               bias_initializer = initializer_zeros()) %>%
