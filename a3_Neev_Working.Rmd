@@ -406,7 +406,7 @@ nn %>% compile(
 ```{r}
 history <- nn %>% fit(
   train_x, train_y,
-  epochs = 100, batch_size = 128,
+  epochs = 25, batch_size = 128,
   validation_split = 0.2, 
   callbacks = list(
     callback_early_stopping(monitor = "val_loss", patience = 5, restore_best_weights = TRUE)
@@ -433,7 +433,7 @@ dnn %>%
   # First hidden layer with 128 units, L2 regularization, and He initializer
   layer_dense(units = 100, 
               input_shape = ncol(train_x), 
-              kernel_regularizer = regularizer_l2(0.01), 
+              kernel_regularizer = regularizer_l2(0.1), 
               kernel_initializer = initializer_he_normal(seed = 1),  # He initializer
               bias_initializer = initializer_zeros()) %>%
   layer_activation_leaky_relu(alpha = 0.1) %>%  # Leaky ReLU activation
@@ -441,7 +441,7 @@ dnn %>%
   
   # Second hidden layer with 64 units, L2 regularization, and He initializer
   layer_dense(units = 50, 
-              kernel_regularizer = regularizer_l2(0.01), 
+              kernel_regularizer = regularizer_l2(0.1), 
               kernel_initializer = initializer_he_normal(seed = 1),  # He initializer
               bias_initializer = initializer_zeros()) %>%
   layer_activation_leaky_relu(alpha = 0.1) %>%  # Leaky ReLU activation
@@ -449,7 +449,7 @@ dnn %>%
   
   # Third hidden layer with 32 units, L2 regularization, and He initializer
   layer_dense(units = 25, 
-              kernel_regularizer = regularizer_l2(0.01), 
+              kernel_regularizer = regularizer_l2(0.1), 
               kernel_initializer = initializer_he_normal(seed = 1),  # He initializer
               bias_initializer = initializer_zeros()) %>%
   layer_activation_leaky_relu(alpha = 0.1) %>%  # Leaky ReLU activation
@@ -457,7 +457,7 @@ dnn %>%
   
   # Output layer with 1 unit (for regression), linear activation, and He initializer
   layer_dense(units = 1, activation = 'linear', 
-              kernel_regularizer = regularizer_l2(0.01), 
+              kernel_regularizer = regularizer_l2(0.1), 
               kernel_initializer = initializer_he_normal(seed = 1),  # He initializer
               bias_initializer = initializer_zeros())  # Initialize bias as zeros
 
@@ -477,7 +477,7 @@ dnn %>% compile(
 ```{r}
 history <- dnn %>% fit(
   train_x, train_y,
-  epochs = 100, batch_size = 50,
+  epochs = 30, batch_size = 50,
   validation_split = 0.2, 
   callbacks = list(
     callback_early_stopping(monitor = "val_loss", patience = 5, restore_best_weights = TRUE)
